@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ar">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام حجز المخيم</title>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    text-align: right;
+    direction: rtl;
+    background-color: #f4f4f4;
+    margin: 0;
+    padding: 0;
+  }
+  .container {
+    max-width: 800px;
+    margin: 20px auto;
+    padding: 20px;
+    background-color: #fff;
+    border-radius: 5px;
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+  }
+  h1, h2 {
+    text-align: center;
+    color: #333;
+  }
+  select, input, button {
+    width: 100%;
+    margin: 10px 0;
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ddd;
+    border-radius: 5px;
+  }
+  button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+  }
+  button:hover {
+    background-color: #0056b3;
+  }
+  .camp {
+    margin: 10px 0;
+    padding: 10px;
+    border-radius: 5px;
+    color: white;
+    font-weight: bold;
+    text-align: center;
+  }
+  .available { background-color: #28a745; }
+  .booked { background-color: #dc3545; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background-color: #fff;
+  }
+  th, td {
+    border: 1px solid #ddd;
+    padding: 8px;
+    text-align: center;
+  }
+  th {
+    background-color: #007bff;
+    color: white;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>نظام حجز المخيم</h1>
+  <h2>احجز مخيمًا</h2>
+  <select id="campSelect">
+    <option value="" disabled selected>اختر مخيمًا</option>
+    <option value="Red">مخيم أحمر</option>
+    <option value="Gold1">مخيم ذهبي 1</option>
+    <option value="Gold2">مخيم ذهبي 2</option>
+    <option value="Black">مخيم أسود</option>
+  </select>
+  <input type="date" id="dateInput" required>
+  <input type="time" id="startTimeInput" required>
+  <input type="time" id="endTimeInput" required>
+  <input type="tel" id="phoneInput" placeholder="رقم الهاتف" required>
+  <button id="bookBtn">احجز المخيم</button>
+  <button id="clearBookingsBtn">مسح جميع الحجوزات</button>
+
+  <h2>المخيمات المتاحة</h2>
+  <div id="availableCamps"></div>
+
+  <h2>المخيمات المحجوزة</h2>
+  <table>
+    <thead>
+      <tr>
+        <th>التاريخ</th>
+        <th>من</th>
+        <th>إلى</th>
+        <th>المخيم</th>
+        <th>رقم الهاتف</th>
+      </tr>
+    </thead>
+    <tbody id="bookedCamps"></tbody>
+  </table>
+</div>
+
+<script>
+  const availableCamps = ["Red", "Gold1", "Gold2", "Black"];
+  let bookings = JSON.parse(localStorage.getItem('bookings')) || {};
+
+  const campSelect = document.getElementById("campSelect");
+  const dateInput = document.getElementById("dateInput");
+  const startTimeInput = document.getElementById("startTimeInput");
+  const endTimeInput = document.getElementById("endTimeInput");
+  const phoneInput = document.getElementById("phoneInput");
+  const bookBtn = document.getElementById("bookBtn");
+  const availableCampsDiv = document.getElementById("availableCamps");
+  const bookedCampsTable = document.getElementById("bookedCamps");
+
+  bookBtn.addEventListener("click", () => {
+    const camp = campSelect.value;
+    const date = dateInput.value;
+    const startTime = startTimeInput.value;
+    const endTime = endTimeInput.value;
+    const phone = phoneInput.value;
+
+    if (!camp || !date || !startTime || !endTime || !phone) {
+      alert("الرجاء اختيار المخيم، تحديد التاريخ والوقت، وإدخال رقم الهاتف.");
+      return;
+    }
+
+    if (startTime >= endTime) {
+      alert("وقت البداية يجب أن يكون قبل وقت النهاية.");
+      return;
+    }
+
+    // Count existing bookings for the camp on the specified date
+    const campBookings = Object.values(bookings).filter(
+      booking => booking.camp === camp && booking.date === date
+    );
+
+    if (campBookings.length >= 2) {
+      alert("المخيم محجوز بالكامل لهذا اليوم. لا يمكن حجز أكثر من مرتين في اليوم.");
+      return;
+    }
+
+    // Check for overlapping booking times
+    const isOverlapping = campBookings.some(booking => {
+      return (
+        (startTime >= booking.startTime && startTime < booking.endTime) ||
+        (endTime > booking.startTime && endTime <= booking.endTime) ||
+        (startTime <= booking.startTime && endTime >= booking.endTime)
+      );
+    });
+
+    if (isOverlapping) {
+      alert("المخيم محجوز بالفعل في هذا النطاق الزمني.");
+      return;
+    }
+
+    // Add the booking
+    const uniqueKey = `${date}_${startTime}_${camp}`;
+    bookings[uniqueKey] = { camp, date, startTime, endTime, phone };
+    localStorage.setItem("bookings", JSON.stringify(bookings));
+
+    renderAvailableCamps();
+    renderBookedCamps();
+  });
+
+  document.getElementById("clearBookingsBtn").addEventListener("click", () => {
+    if (confirm("هل أنت متأكد من مسح جميع الحجوزات؟")) {
+      bookings = {};
+      localStorage.removeItem("bookings");
+      renderAvailableCamps();
+      renderBookedCamps();
+    }
+  });
+
+  function renderAvailableCamps() {
+    availableCampsDiv.innerHTML = "";
+    availableCamps.forEach(camp => {
+      const isBookedNow = Object.values(bookings).some(booking => {
+        return booking.camp === camp;
+      });
+
+      const campDiv = document.createElement("div");
+      campDiv.classList.add("camp", isBookedNow ? "booked" : "available");
+      campDiv.textContent = `${camp} - ${isBookedNow ? "محجوز" : "متاح"}`;
+      availableCampsDiv.appendChild(campDiv);
+    });
+  }
+
+  function renderBookedCamps() {
+    bookedCampsTable.innerHTML = "";
+    Object.values(bookings).forEach(booking => {
+      const row = bookedCampsTable.insertRow();
+      row.insertCell(0).textContent = booking.date;
+      row.insertCell(1).textContent = booking.startTime;
+      row.insertCell(2).textContent = booking.endTime;
+      row.insertCell(3).textContent = booking.camp;
+      row.insertCell(4).textContent = booking.phone;
+    });
+  }
+
+  renderAvailableCamps();
+  renderBookedCamps();
+</script>
+</body>
+</html>
